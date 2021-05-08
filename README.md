@@ -29,3 +29,36 @@ Here, I demonstrate how to prepare the geometry and run the code to predict the 
 First, create the desired geometry model in 2D. As an example I choose the following 2D modified CT sample illustrated in the YouTube video.
 
 Notice that the geometry has to contain an area (in this case A3 shown in the figure below) in which the crack is expected to propagate. This area will be (re)-meshed automatically. The keypoint of the crack initiation (KP = 27) and the expected final crack position (KPe = 33) have to be defined on the boundary (NOT within). The size of the crack propagation zone (A3) and the choice of the keypoint of the expected final crack position do not influence the result; however, they influence the efficiency (time to remesh) and stability of the solution.
+
+dimensions                   | finite element mesh
+:---------------------------:|:---------------------------:
+![](figures/drawing.svg)  | ![](figures/initial_mesh.svg)
+
+The code to generate this geometry is provided in the file `CT_modified.mac`.
+
+### Running the macro
+
+- Download and copy the macro MTSC.mac into your home directory (usually This PC > OS(C:) > Users > your_username)
+- Type MTSC in the ANSYS's command line to call the macro.
+- A window will appear to provide basic input parameters. For now, you can keep the default values.
+
+This code has been most recently tested with ANSYS Mechanical APDL 2019 R2 (Student Version - limited mesh size) and some older versions.
+
+> **I had to modify the original code to make it compatible with this new version of ANSYS. I noticed that 'SET, LAST' is necessary to include to read the last set of results before one can plot the solution nodal data.**
+
+### Analysing the results
+
+The final geometry is shown in the figure below:
+
+final geometry               | von-mises stress
+:---------------------------:|:---------------------------:
+![](figures/final_geometry.png)  | ![](figures/final_mises.png)
+
+## FAQ
+Feel free to use, share and modify the code to your needs. While there is a lot to improve, I hope the algorithm will provide some inspiration on how to approach solving such problems. If you use the code, please cite the following thesis:
+
+<a href="https://www.vutbr.cz/en/students/final-thesis?zp_id=49360">Mikula Jakub, Numerické modelování šišení trhlin v rámci platnosti LELM. Brno: Vysoké učení technické v Brně, Fakulta strojního inženýrství, 2012. 60s.</a>
+
+
+Note that this code was written quite some time ago (y. 2012), and therefore there remains a lot to be improved. Also note that the Academic version may crash when the number of the generated nodes at any iteration reaches more than 32000!
+
