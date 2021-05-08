@@ -1,3 +1,5 @@
+> Most recently tested with `ANSYS Mechanical APDL 2019 R2`.
+
 ## Background
 ### Theory
 High-cycle fatigue can be generally divided into three stages: crack **nucleation**, crack **growth**, and eventually brittle **failure**. Here, I focus on the second stage - stable crack growth. Under certain conditions, the crack growth can be described by the Paris-Erdogan law (logarithmically linear dependence between the number of cycles and the stress intensity factor K). Predictions of the lifetime (number of cycles) of a sample with a pre-existing crack or predictions of the crack path are of crucial importance in assessing the conditions of engineering structures subjected to cyclic loading, such as shafts, switches and others. Furthermore, the ability to predict the crack path using computer simulations allows one to optimize the structural properties with an effort to prevent the failure.
