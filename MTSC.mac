@@ -1,0 +1,792 @@
+!!Bakalarska praca
+!!Jakub Mikula
+!!MAXIMUM TANGENCIAL STRESS CRITERION - MTSC
+
+
+CSYS,0																			!Globalny suradnicovy system
+/Prep7
+	
+!! Dane konstanty je mozne zmenit:
+	
+	Pi=3.1415926535																!Ludolfovo cislo												
+	Epsilon=5e-5																!Chyba numerickeho riesenia rovnice pre sirenie trhliny
+	Ra=0.5																		!Pomer polomeru kruhovej oblasti k dlzke trhliny
+	nles=50																		!Pocet elementov na ciare spajajucej KP a KPe
+	
+multipro,'start',6																!Zobrazenie tabulky, vyplnenie zakladnych udajov
+	*cset,1,3,Area,'Area Number',1
+	*cset,4,6,KP,'Keypoint of start',1
+	*cset,7,9,KPe,'Keypoint of end',1
+	*cset,10,12,a,'Length of Initial Crack [mm]',1
+	*cset,13,15,ap,'Crack Increment [mm]',1
+	*cset,16,18,Theta,'Angle of Initial Crack [°]',0
+	*cset,19,21,cycle,'Number of increments',1
+	*cset,22,24,sigmay,'Yield stress [MPa]',160
+	*cset,25,27,lock,'Locked angle',0
+	*cset,61,62,'MMTS criterion'
+multipro,'end'
+
+!! Konstanty, ktore nie su urcene k zmene: 
+	tt=1
+	NN=1
+	condition=1
+	t=1						
+	k=1
+	HP=0
+	DP=0
+
+	
+	*GET,poisson,PRXY,1,TEMP													!Ulozenie poissonova cisla
+	*GET,EMX,EX,1,TEMP															!Ulozenie modulu pruznosti v tahu
+		GMX=EMX/2/(1+poisson)													!Vypocet modulu pruznosti v smyku
+
+
+		
+*if,_BUTTON,EQ,0,THEN 			!Multipro condition								!Kontrola potvrdenia tabulky zakladnych udajov
+
+CSWPLA,33,0,1,1
+
+app=a
+ToC='MTS criterion'
+Theta3=Theta
+appx=0
+appy=0
+
+*do,j,1,cycle,1		
+
+appx=a*cos(Theta3*Pi/180)+appx
+appy=a*sin(Theta3*Pi/180)+appy
+																				!Cyklus, vytvaranie prirastkov trhliny
+	ALLSEL,ALL																	!Vyber vsetkeho
+	rKSCON=0.0005*a																!KSCON
+
+	*get,NOL,lines,,count														!Ulozenie poctu ciar v modeli
+	*get,NOK,kp,,count															!Ulozenie poctu bodov v modeli
+
+	*if,tt,EQ,1,THEN															!Prikazy za touto podmienkov sa vykonaju iba v prom cykle
+		*get,NOA,areas,,count													!Ulozenie poctu ploch v modeli
+			
+		*get,minKP,KP,0,num,min													!Urcenie cisla pociatocneho bodu po precisleni prvkov
+			*DO,i,1,NOK,1
+				*if,minKP,EQ,KP,THEN
+					KP=k
+				*endif
+			*GET,nextKP,KP,minKP,NXTH
+				minKP=nextKP
+				k=k+1
+			*ENDDO
+		k=1
+
+		*get,minKPe,KP,0,num,min												!Urcenie cisla koncoveho bodu po precisleni	prvkov
+			*DO,i,1,NOK,1
+				*if,minKPe,EQ,KPe,THEN
+					KPe=k	
+				*endif
+			*GET,nextKP,KP,minKPe,NXTH
+				minKPe=nextKP
+				k=k+1
+			*ENDDO
+		k=1
+		
+		*get,minAREA,AREA,0,num,min												!Urcenie cisla plochy po precisleni prvkov
+			*DO,i,1,NOA,1
+				*if,minAREA,EQ,AREA,THEN
+					AREA=k
+				*endif
+			*GET,nextAREA,AREA,minAREA,NXTH
+				minAREA=nextAREA
+				k=k+1
+			*ENDDO
+		k=1
+	
+		NUMCMP,ALL 																!Precislenie vsetkych prvkov
+		KP1=KP
+		
+		ASEL,S,,,Area 															!Vyber zvolenej plochy
+		LSLA,S 																	!Vyber ciar, ktore danu plochu tvoria
+		KSLL,S 																	!Vyber bodov, ktore patria danym ciaram
+
+		*get,NOL1,lines,,count													!Pocet vybranych ciar	
+		*get,NOK1,kp,,count														!Pocet vybranych bodov
+
+			*DIM,POLINES,TABLE,NOL1,3,1,NOL,POF 								!Tabulka vybranych ciar
+				*DO,i,1,3,1
+					*SET,POLINES(0,i),i
+				*ENDDO
+				*DO,i,1,NOL1,1
+					*SET,POLINES(i,0),i
+				*ENDDO
+	
+			*DIM,POKEYPOINTS,TABLE,NOK1,3,1,NOKP,POKP 							!Tabulka vybranych bodov
+				*DO,i,1,3,1
+					*SET,POKEYPOINTS(0,i),i
+				*ENDDO
+				*DO,i,1,NOK1,1
+					*SET,POKEYPOINTS(i,0),i
+				*ENDDO
+				
+			*DIM,FACTORS,TABLE,cycle,7,1,NOKP,POKP 								!Tabulka pre faktory intenzity napatia
+				*DO,i,1,7,1
+					*SET,FACTORS(0,i),i
+				*ENDDO
+				*DO,i,1,cycle,1
+					*SET,FACTORS(i,0),i
+				*ENDDO
+				
+			*DIM,TSTRESSA,TABLE,20,4,1,NOKP,POKP 								!Tabulka pre T napätie
+				*DO,i,1,4,1
+					*SET,TSTRESSA(0,i),i
+				*ENDDO
+				*DO,i,1,20,1
+					*SET,TSTRESSA(i,0),i
+				*ENDDO
+
+			*do,i,1,NOL,1														!Zapis vybranych ciar do tabulky
+				*GET,status,LINE,i,LSEL
+					*if,status,EQ,1,THEN
+						*SET,POLINES(t,1),i
+						*VGET,POLINES(t,2),LINE,i,KP,1, , ,2
+						*VGET,POLINES(t,3),LINE,i,KP,2, , ,2
+						t=t+1
+					*endif
+			*enddo
+		t=1
+
+			*do,i,1,NOK,1 														!Zapis vybranych bodov do tabulky
+				*GET,status,KP,i,KSEL
+					*if,status,EQ,1,THEN
+						*SET,POKEYPOINTS(t,1),i
+						*VGET,POKEYPOINTS(t,2),KP,i,LOC,X, , ,2
+						*VGET,POKEYPOINTS(t,3),KP,i,LOC,Y, , ,2
+						t=t+1
+					*endif
+				*enddo
+		t=1
+		
+		ALLSEL,ALL 																!Vyber vsetkych prvkov
+			*do,i,1,NOK1,1														!Posuv vsetkeho s pociatocnym bodom v pociatku globalneho CS
+				*if,POKEYPOINTS(i,1),EQ,KP,THEN
+					AGEN, ,All, , ,-POKEYPOINTS(i,2),-POKEYPOINTS(i,3),0, , ,1
+				*endif
+			*enddo
+		ADELE,Area 
+
+	*ENDIF																		
+
+	xT=a*cos(Theta*Pi/180)														!Vytvorenie trhliny a oblasti v jej okoli
+	yT=a*sin(Theta*Pi/180)
+		K,NOK+1,0,0 																		
+		K,NOK+2,(1-Ra)*a*cos(Theta*Pi/180),(1-Ra)*a*sin(Theta*Pi/180)
+		K,NOK+3,xT,yT
+		K,NOK+4,(1-Ra)*a*cos(Theta*Pi/180),(1-Ra)*a*sin(Theta*Pi/180)
+
+		l,NOK+1,NOK+4
+		l,KP1,NOK+2
+		l,NOK+4,NOK+3
+		l,NOK+2,NOK+3
+
+		k,NOK+5,xT-Ra*a*sin(Theta*Pi/180),yT+Ra*a*cos(Theta*Pi/180)
+		k,NOK+6,xT+Ra*a*cos(Theta*Pi/180),yT+Ra*a*sin(Theta*Pi/180)
+		k,NOK+7,xT+Ra*a*sin(Theta*Pi/180),yT-Ra*a*cos(Theta*Pi/180)
+
+		LARC,NOK+4,NOK+5,NOK+3,Ra*a
+		LARC,NOK+7,NOK+2,NOK+3,Ra*a
+		LARC,NOK+5,NOK+6,NOK+3,Ra*a
+		LARC,NOK+6,NOK+7,NOK+3,Ra*a
+
+		l,NOK+5,NOK+3
+		l,NOK+6,NOK+3
+		l,NOK+7,NOK+3
+
+		l,NOK+6,KPe
+
+	al,NOL+3,NOL+5,NOL+9
+	al,NOL+9,NOL+7,NOL+10
+	al,NOL+10,NOL+11,NOL+8
+	al,NOL+6,NOL+4,NOL+11
+
+	*if,tt,EQ,1,THEN					!sprav iba pri prvom cykle
+		*do,i,1,NOK1,1															!Urcenie uhlu medzi KP a KPe, teda rozlysenie medzi hornou a dolnou podplochou
+			*if,POKEYPOINTS(i,1),EQ,KP,THEN	
+				KPx=POKEYPOINTS(i,2)
+				KPy=POKEYPOINTS(i,3)
+			*endif
+			*if,POKEYPOINTS(i,1),EQ,KPe,THEN
+				KPex=POKEYPOINTS(i,2)
+				KPey=POKEYPOINTS(i,3)
+			*endif
+		*enddo
+
+		*if,KPex-KPx,EQ,0,THEN
+			Theta2=Pi/2
+		*else
+			K=(KPey-KPy)/(KPex-KPx)
+		Theta2=atan(K)
+		*endif
+
+		*if,KPex,LT,KPx,THEN
+			*if,KPey,GT,KPy,THEN
+				Theta2=Pi/2+abs(Theta2)
+			*endif
+			*if,KPey,LT,KPy,THEN
+				Theta2=Pi+abs(Theta2)
+			*endif
+		*endif
+		
+		*if,KPex,GT,KPx,THEN
+			*if,KPey,LT,KPy,THEN
+				Theta2=3/2*Pi+abs(Theta2)
+			*endif
+		*endif
+		
+		*if,KPex,EQ,KPx,THEN
+			*if,KPey,LT,KPy,THEN
+				Theta2=3/2*Pi
+			*endif
+		*endif
+		
+		*if,KPey,EQ,KPy,THEN
+			*if,KPex,LT,KPe,THEN
+				Theta2=Pi
+			*endif
+		*endif
+
+
+		ext=-POKEYPOINTS(1,2)*sin(Theta2)+POKEYPOINTS(1,3)*cos(Theta2)			!Urcenie bodu s najvyssou suradnicou
+		Kpext=POKEYPOINTS(1,1)
+			*do,i,2,NOK1,1
+				*if,-POKEYPOINTS(i,2)*sin(Theta2)+POKEYPOINTS(i,3)*cos(Theta2),GT,ext,THEN
+					ext=-POKEYPOINTS(i,2)*sin(Theta2)+POKEYPOINTS(i,3)*cos(Theta2)
+					KPext=POKEYPOINTS(i,1)
+				*endif
+			*enddo
+	*endif
+
+	k=0
+	i=1
+	c=0
+	t=1
+	KPi=KP
+	condition=1
+
+	LSEL,U,,,ALL																!Selektovanie ciar prvej podplochy
+		*dowhile,condition															
+			*if,POLINES(i,2),EQ,KPi,THEN
+				*if,POLINES(i,1),NE,C,THEN
+					LSEL,A, , ,POLINES(i,1)
+					KPi=POLINES(i,3)
+					C=POLINES(i,1)
+					i=0
+					t=t+1
+				*endif
+			*endif
+			*if,POLINES(i,3),EQ,KPi,THEN
+				*if,POLINES(i,1),NE,C,THEN
+					LSEL,A, , ,POLINES(i,1)
+					KPi=POLINES(i,2)
+					C=POLINES(i,1)
+					i=0
+					t=t+1
+				*endif
+			*endif
+		i=i+1
+			*if,KPi,EQ,KPe,THEN
+				condition=0
+			*endif
+		*enddo
+
+	KSLL,S 																		!Vyber bodov, ktore patria danym ciaram
+		*get,STATUS,KP,KPext,KSEL												!Urcenie o aku plochu sa jedna (horna, dolna)
+
+		*if,STATUS,EQ,1,THEN
+			*if,tt,EQ,1,THEN
+				*do,i,1,NOL1,1
+					*if,POLINES(i,2),EQ,KP,THEN
+						*get,STATUS,LINE,POLINES(i,1),LSEL
+							*if,STATUS,EQ,1,THEN
+								ldele,POLINES(i,1)
+								KSEL,A,,,NOK+1
+								l,POLINES(i,3),NOK+1
+								HP=POLINES(i,2)
+								HPi=i
+								HPj=2
+								POLINES(i,2)=NOK+1
+							*endif
+					*endif
+		
+					*if,POLINES(i,3),EQ,KP,THEN
+						*get,STATUS,LINE,POLINES(i,1),LSEL
+							*if,STATUS,EQ,1,THEN
+								ldele,POLINES(i,1)
+								KSEL,A,,,NOK+1
+								l,POLINES(i,2),NOK+1
+								HP=POLINES(i,3)
+								HPi=i
+								HPj=3
+								POLINES(i,3)=NOK+1
+							*endif
+					*endif									
+				*enddo
+			*endif
+				k=1																!Jedna sa o hornu plochu
+		*else
+				ww=0
+				k=2																!Jedna sa o dolnu plochu
+
+			*do,i,1,NOL1,1
+					*if,POLINES(i,2),EQ,KP,THEN
+						*if,ww,EQ,0,THEN
+							DP=POLINES(i,2)
+							DPi=i
+							DPj=2
+							POLINES(i,2)=NOK+1
+							ww=1
+						*endif
+					*endif
+		
+					*if,ww,EQ,0,THEN
+						*if,POLINES(i,3),EQ,KP,THEN
+							DP=POLINES(i,3)
+							DPi=i
+							DPj=3
+							POLINES(i,3)=NOK+1
+							ww=1
+						*endif
+					*endif
+			*enddo	
+		*endif
+
+		*if,STATUS,EQ,1,THEN													!Selktovanie ciar doposial vytvorenej trhliny
+			LSEL,A,,,NOL+k
+			LSEL,A,,,NOL+k+4
+			LSEL,A,,,NOL+k+6
+			LSEL,A,,,NOL+12
+				*if,tt,NE,1,THEN
+					*do,q,1,NN-1,1
+						LSEL,A,,,NOL-(4*q-3)
+						LSEL,A,,,NOL-(4*q-1)
+					*enddo
+				*endif
+				
+			*if,tt,NE,1,THEN
+				*if,k,EQ,1,THEN
+					ldele,NOL-1
+					KSEL,A,,,NOK
+					KSEL,A,,,NOK+1
+					l,NOK,NOK+1
+					POLINES(HPi,HPj)=NOK+1
+				*endif
+			*endif
+		*else
+			LSEL,A,,,NOL+k
+			LSEL,A,,,NOL+k+4
+			LSEL,A,,,NOL+k+6
+			LSEL,A,,,NOL+12
+				*if,tt,NE,1,THEN
+					*do,q,1,NN-1,1
+						LSEL,A,,,NOL-(4*q-4)
+						LSEL,A,,,NOL-(4*q-2)
+					*enddo
+				*endif
+			*if,tt,NE,1,THEN
+				*if,k,EQ,1,THEN
+					ldele,NOL-1
+					KSEL,A,,,NOK
+					KSEL,A,,,NOK+1
+					l,NOK,NOK+1
+					POLINES(HPi,HPj)=NOK+1
+				*endif
+			*endif
+		*endif
+	al,all																		!Vytvorenie prvej podplochy
+
+	k=0
+	i=0
+	c=0
+	t=1
+	KPi=KP
+	condition=1
+
+	LSEL,U,,,ALL
+	*dowhile,condition															
+		*if,POLINES(i,2),EQ,KPi,THEN
+			*if,POLINES(i,1),NE,C,THEN
+				LSEL,A, , ,POLINES(i,1)
+				KPi=POLINES(i,3)
+				C=POLINES(i,1)
+				i=0
+				t=t+1
+			*endif
+		*endif
+		*if,POLINES(i,3),EQ,KPi,THEN
+			*if,POLINES(i,1),NE,C,THEN
+				LSEL,A, , ,POLINES(i,1)
+				KPi=POLINES(i,2)
+				C=POLINES(i,1)
+				i=0
+				t=t+1
+			*endif
+		*endif
+			i=i+1
+		*if,KPi,EQ,KPe,THEN
+			condition=0
+		*endif
+	*enddo
+
+	KSLL,S 																			
+		*get,STATUS,KP,KPext,KSEL												
+
+	*if,STATUS,EQ,1,THEN
+		*if,tt,EQ,1,THEN
+			*do,i,1,NOL1,1
+				*if,POLINES(i,2),EQ,KP,THEN
+					*get,STATUS,LINE,POLINES(i,1),LSEL
+						*if,STATUS,EQ,1,THEN
+							ldele,POLINES(i,1)
+							KSEL,A,,,NOK+1
+							l,POLINES(i,3),NOK+1
+							HP=POLINES(i,2)
+							HPi=i
+							HPj=2
+							POLINES(i,2)=NOK+1
+						*endif
+				*endif
+		
+				*if,POLINES(i,3),EQ,KP,THEN
+					*get,STATUS,LINE,POLINES(i,1),LSEL
+						*if,STATUS,EQ,1,THEN
+							ldele,POLINES(i,1)
+							KSEL,A,,,NOK+1
+							l,POLINES(i,2),NOK+1
+							HP=POLINES(i,3)
+							HPi=i
+							HPj=3
+							POLINES(i,3)=NOK+1
+						*endif
+				*endif
+			*enddo
+		*endif
+			k=1
+	*else
+			k=2
+			
+	*endif
+
+	*if,STATUS,EQ,1,THEN
+		LSEL,A,,,NOL+k
+		LSEL,A,,,NOL+k+4
+		LSEL,A,,,NOL+k+6
+		LSEL,A,,,NOL+12
+			*if,tt,NE,1,THEN
+				*do,q,1,NN-1,1
+					LSEL,A,,,NOL-(4*q-3)
+					LSEL,A,,,NOL-(4*q-1)
+				*enddo
+			*endif
+			*if,tt,NE,1,THEN
+				*if,k,EQ,1,THEN
+					ldele,NOL-1
+					KSEL,A,,,NOK
+					KSEL,A,,,NOK+1
+					l,NOK,NOK+1
+					POLINES(HPi,HPj)=NOK+1
+				*endif
+			*endif
+	*else
+		LSEL,A,,,NOL+k
+		LSEL,A,,,NOL+k+4
+		LSEL,A,,,NOL+k+6
+		LSEL,A,,,NOL+12
+			*if,tt,NE,1,THEN
+				*do,q,1,NN-1,1
+					LSEL,A,,,NOL-(4*q-4)
+					LSEL,A,,,NOL-(4*q-2)
+				*enddo
+			*endif
+			*if,tt,NE,1,THEN
+				*if,k,EQ,1,THEN
+					ldele,NOL-1
+					KSEL,A,,,NOK
+					KSEL,A,,,NOK+1
+					l,NOK,NOK+1
+					POLINES(HPi,HPj)=NOK+1
+				*endif
+			*endif
+	*endif
+	al,all																		!Vytvorenie druhej plochy
+
+	allsel,all
+
+	*GET,mat,AREA,AREA,ATTR,MAT													!Zistenie materialu v oblasti sirenia trhliny
+	
+	GPLOT 
+	/AUTO,1 
+	/REP,FAST
+	
+	FINISH
+	/PREP7
+	KSCON,NOK+3,rKSCON,1														!Tvorba siete
+
+	*GET,LLength,LINE,NOL+12,LENG
+	LESIZE,NOL+12,,,nles														!Tvorba elementov na ciare spajajucej KP a KPe
+
+	AESIZE,NOA+1,Ra*a/10														!Tvorba siete na kruhovej oblasti trhliny
+	AESIZE,NOA+2,Ra*a/10
+	AESIZE,NOA+3,Ra*a/10
+	AESIZE,Area,Ra*a/10
+	
+	!MSHAPE,1,2D				
+	AMESH,NOA+1
+	AMESH,NOA+2
+	AMESH,NOA+3
+	AMESH,Area
+
+	MSHAPE,1,2D																	!Tvorba siete na obydvoch podplochách		
+	AMESH,NOA+4
+	AMESH,NOA+5
+
+	/prep7
+	!*do,ii,1,NOK,1																!Otocenie lokalnych CS v kazdom uzle pod kazdym KP
+	!	*GET,NODCS,KP,ii,ATTR,NODE
+	!		*if,ii,NE,KP,THEN
+	!			NMODIF,NODCS,,,,-Theta3,0,0
+	!		*endif
+	!*enddo
+
+	clocal,33,,,,,-Theta3
+	CSYS,33
+	NROTAT,all
+	CSYS,0
+	
+	
+	
+	
+	allsel,all
+		AGEN,,all,,,-a*cos(Theta*Pi/180),-a*sin(Theta*Pi/180),0,,,1				!Otocenie a posunutie celeho modelu do cela trhliny
+		CSKP,11,0,NOK+3,NOK+6,NOK+5,1,1
+		ATRAN,0,all,,,,0,1
+
+	DSYS,0
+	CSYS,0
+	
+	/sol																		!Riesenie															
+	solve
+	
+	FINISH
+	
+	/POST1
+	SET,LAST
+	PATH,K,5,30,20																!Vypocet faktorov intenzity napatia
+
+	KSEL,S,,,NOK+3
+	NSLK,S
+		*get,nextHN,NODE,,NXTH
+	PPATH,1,nextHN
+
+	LSELE,S,,,NOL+4																!Spodna ciara
+	NSLL,S,1										
+	NSEL,R,LOC,X,-rKSCON/2,-rKSCON/8								
+		*get,nextHN,NODE,,NXTH
+		*get,DPu2,NODE,nextHN,U,X
+		*get,DPv2,NODE,nextHN,U,Y
+	PPATH,4,nextHN
+
+	LSELE,S,,,NOL+4
+	NSLL,S,1
+	NSEL,R,LOC,X,-rKSCON,-rKSCON/1.5
+		*get,nextHN,NODE,,NXTH
+		*get,DPu3,NODE,nextHN,U,X
+		*get,DPu3x,NODE,nextHN,LOC,X
+		*get,DPv3,NODE,nextHN,U,Y
+	PPATH,5,nextHN
+
+	LSELE,S,,,NOL+3																!Vrchna ciara
+	NSLL,S,1
+	NSEL,R,LOC,X,-rKSCON/2,-rKSCON/8
+		*get,nextHN,NODE,,NXTH
+		*get,DPu4,NODE,nextHN,U,X
+		*get,DPv4,NODE,nextHN,U,Y
+	PPATH,2,nextHN
+
+	LSELE,S,,,NOL+3
+	NSLL,S,1
+	NSEL,R,LOC,X,-rKSCON,-rKSCON/1.5
+		*get,nextHN,NODE,,NXTH
+		*get,DPu5,NODE,nextHN,U,X
+		*get,DPv5,NODE,nextHN,U,Y
+	PPATH,3,nextHN
+
+	Lnode=abs(DPu3x)
+	allsell,all
+
+	EPLOT
+
+	KCALC,0,-mat,3,0
+		*GET,KI,KCAL,,K,1
+		*GET,KII,KCAL,,K,2
+
+	DPP=(4*(DPu4-DPu2)-(DPu5-DPu3)/2)											!Urcenie znamienka faktoru KII
+		*if,DPP,LT,0,THEN
+			KII=-1*KII
+		*endif
+
+		KIt=EMX/(3*(1+poisson)*(1+(3-poisson)/(1+poisson)))*sqrt(2*Pi/Lnode)*(4*(DPv4-DPv2)-(DPv5-DPv2)/2)
+		KIIt=EMX/(3*(1+poisson)*(1+(3-poisson)/(1+poisson)))*sqrt(2*Pi/Lnode)*(4*(DPu4-DPu2)-(DPu5-DPu3)/2)
+		rc=1/2/Pi*(KI/sigmay)*(KI/sigmay)
+		
+		
+		LSEL,S,,,NOL+10
+		NSLL,S,1
+		NSEL,U,LOC,X,-Ra*a/10,Ra*a/10
+		NSEL,R,S,X,,,,0
+		
+			*do,ij,1,20,1
+				NODn=NODE(0,0,0)
+				*GET,NODxx,NODE,NODn,S,X
+				*GET,NODyy,NODE,NODn,S,Y
+				*GET,NODu,NODE,NODn,LOC,X
+				
+				*SET,TSTRESSA(ij,1),NODxx
+				*SET,TSTRESSA(ij,2),NODyy
+				*SET,TSTRESSA(ij,3),NODxx-NODyy
+				*SET,TSTRESSA(ij,4),NODu
+				
+				NSEL,U,,,NODn
+			*enddo
+			
+			DETH1=0																!Metoda najmensich stvorcov
+			*do,ij,1,20,1
+				DETH1=DETH1+TSTRESSA(ij,4)
+			*enddo
+			
+			DETH2=0
+			*do,ij,1,20,1
+				DETH2=DETH2+TSTRESSA(ij,4)**2
+			*enddo
+			
+			DETH3=0
+			*do,ij,1,20,1
+				DETH3=DETH3+TSTRESSA(ij,3)
+			*enddo
+			
+			DETH=20*DETH2-DETH1**2
+			
+			numerator1=0
+			*do,ij,1,20,1
+				numerator1=numerator1+TSTRESSA(ij,4)*TSTRESSA(ij,3)
+			*enddo
+			
+			b2=(20*numerator1-DETH1*DETH3)/DETH
+			
+			sigmaxxyy=0
+			*do,ij,1,20,1
+				sigmaxxyy=sigmaxxyy+TSTRESSA(ij,3)
+			*enddo
+			sigmaxxyy=sigmaxxyy/20
+			
+			positiont=0
+			*do,ij,1,20,1
+				positiont=positiont+TSTRESSA(ij,4)
+			*enddo
+			positiont=positiont/20
+			
+		Tstress=sigmaxxyy-b2*positiont
+		
+		*set,FACTORS(NN,1),KI													!Zapis faktorov do tabulky
+		*set,FACTORS(NN,2),KII
+		*set,FACTORS(NN,3),Tstress
+		*SET,FACTORS(NN,6),appx
+		*SET,FACTORS(NN,7),appy
+		
+!!Riesenie rovnice sirenia trhliny pomocou metody bisekcie		
+		h1=-Pi/3
+		h2=Pi/3
+
+			pocetk=-(1+(log(epsilon/Pi))/log(2))								!Presnost
+
+				*do,mb,1,pocetk,1
+					fy1=KI*sin(h1)+KII*(3*cos(h1)-1)
+					fy2=KI*sin(h2)+KII*(3*cos(h2)-1)
+					s=(h2+h1)/2
+					fys=KI*sin(s)+KII*(3*cos(s)-1)
+
+						*if,fy1,NE,0,then
+						*if,fys,NE,0,then
+
+							*if,fy1/abs(fy1),NE,fys/abs(fys),then
+								h2=s
+							*else
+								h1=s
+							*endif
+						*endif
+						*endif
+				*enddo
+				
+			solution=(h1+h2)/2
+			theta=solution*180/Pi
+
+			*SET,FACTORS(NN,4),Theta
+
+			
+			*if,lock,EQ,1,THEN
+				theta=0
+			*endif
+			
+	*if,NN,LT,cycle,THEN														!Poslednym krokom sa dalsie prikazy nevykonaju							
+	*if,cycle,GT,1,THEN
+		FINISH
+		/PREP7
+
+		ASEL,U,,,ALL															!Vymazanie siete a dalsich oblasti
+		LSEL,U,,,ALL
+		KSEL,U,,,ALL
+
+		ASEL,A,,,Area				
+			*DO,i,1,5,1
+				ASEL,A,,,NOA+i
+			*ENDDO
+		ACLEAR,ALL
+		ADELE,ALL
+
+			*DO,i,5,12,1			
+				LSEL,A,,,NOL+i
+			*ENDDO
+		LDELE,ALL
+
+		*DO,i,5,7,1				
+			KSEL,A,,,NOK+i
+		*ENDDO
+		KDELE,ALL
+		KSEL,A,,,NOK+3
+			KSCON,NOK+3				
+		ALLSEL,ALL					
+
+		Theta3=Theta3+Theta
+		tt=0
+	*endif
+	*endif
+
+	POLINES(HPi,HPj)=HP
+	POLINES(DPi,DPj)=DP
+	
+	*SET,FACTORS(NN,5),app
+	a=ap
+	app=app+a
+	
+	NN=NN+1
+	KP1=NOK+3
+
+	/REPLO  
+	/AUTO,1 
+	/REP,FAST
+*enddo
+
+	*GET,rotX,KP,KP,LOC,X														
+	*GET,rotY,KP,KP,LOC,Y
+		LOCAL,12,0,rotX,rotY,0,-Theta3,,,1,1,
+	DSYS,12
+	CSYS,12
+
+	aplot
+
+*ENDIF																			!Ukonenie podmienky multipro
